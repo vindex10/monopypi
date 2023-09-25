@@ -1,6 +1,7 @@
 import os
 
 import flask
+import requests
 
 from monopypi.build import build_package_if_not
 from monopypi.config import CFG
@@ -41,6 +42,8 @@ def get_root():
 
 @app.route("/<package_name>/", methods=["GET"])
 def get_package(package_name):
+    if package_name not in STATE.schema:
+        return requests.get(f"{CFG().pypi_fallback}/{package_name}", timeout=CFG().pypi_fallback_timeout).content
     package_dist_dir = build_package_if_not(package_name)
     artifacts = os.listdir(package_dist_dir)
     res = []
@@ -64,5 +67,7 @@ def get_package(package_name):
 
 @app.route("/<package_name>/<package_artifact>", methods=["GET"])
 def get_artifact(package_name, package_artifact):
+    if package_name not in STATE.schema:
+        return requests.get(f"{PYPI_FALLBACK}/{package_name}/{package_artifact}", timeout=PYPI_TIMEOUT).content
     package_dist_dir = build_package_if_not(package_name)
     return flask.send_file(os.path.join(package_dist_dir, package_artifact))

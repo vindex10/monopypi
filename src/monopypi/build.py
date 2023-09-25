@@ -1,8 +1,13 @@
 import os
+import shutil
+import tempfile
 import threading
 from contextlib import contextmanager
 
+import wheel.cli.pack
+import wheel.cli.unpack
 from build.__main__ import main as build_main
+from wheel.wheelfile import WheelFile
 
 from monopypi.config import CFG
 from monopypi.state import STATE
@@ -32,6 +37,30 @@ def build_package(package_name):
         if "wheel" in BUILD_TARGETS:
             args.append("-w")
         build_main(args)
+        if CFG().editable:
+            make_wheels_editable(package_dist_dir, build_source_dir)
+
+
+def make_wheels_editable(package_dist_dir, build_source_dir):
+    for fname in os.listdir(package_dist_dir):
+        if not fname.endswith(".whl"):
+            continue
+        wheel_path = os.path.join(package_dist_dir, fname)
+        make_wheel_editable(wheel_path, build_source_dir)
+
+
+def make_wheel_editable(wheel_path, build_source_dir):
+    with WheelFile(wheel_path) as wf:
+        name = wf.parsed_filename.group("name")
+        namever = wf.parsed_filename.group("namever")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        wheel.cli.unpack.unpack(wheel_path, tmpdir)
+        wheel_dir = os.path.join(tmpdir, namever)
+        with open(os.path.join(wheel_dir, f"{name}.pth"), "w", encoding="utf-8") as pth:
+            pth.write(f"{build_source_dir}/src\n")
+        shutil.rmtree(os.path.join(wheel_dir, name))
+        os.remove(wheel_path)
+        wheel.cli.pack.pack(wheel_dir, os.path.dirname(wheel_path), build_number=None)
 
 
 @contextmanager
